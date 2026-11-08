@@ -1,0 +1,263 @@
+// Coaching fee tracking + parent portal.
+//
+// Portability rules (SQLite locally, Postgres on deploy):
+//   - no Prisma enums: status/kind columns are strings, validated in
+//     src/lib/domain/* with Zod / literal unions
+//   - money is Int paise (no floats, no Decimal)
+//   - dates are DateTime; date-only values are stored at 00:00 UTC
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------- org ----------
+
+model Centre {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  batches Batch[]
+}
+
+model Batch {
+  id        String    @id @default(cuid())
+  name      String // "JEE 2027 Morning"
+  course    String // "JEE" | "NEET"
+  centreId  String
+  centre    Centre    @relation(fields: [centreId], references: [id])
+  startDate DateTime
+  endDate   DateTime
+  students  Student[]
+
+  @@unique([centreId, name])
+}
+
+// ---------- people & auth ----------
+
+model User {
+  id        String       @id @default(cuid())
+  phone     String       @unique // E.164 without +, e.g. 919812345678
+  name      String
+  role      String // "parent" | "accounts"
+  language  String       @default("en") // "en" | "hi"
+  consentAt DateTime? // DPDP verifiable parental consent; parents only
+  children  Student[]
+  sessions  Session[]
+  messages  MessageLog[]
+  createdAt DateTime     @default(now())
+}
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Student {
+  id         String           @id @default(cuid())
+  code       String           @unique // "STU-0412"
+  name       String
+  batchId    String
+  batch      Batch            @relation(fields: [batchId], references: [id])
+  parentId   String
+  parent     User             @relation(fields: [parentId], references: [id])
+  status     String           @default("active") // "active" | "left"
+  leftOn     DateTime?
+  feePlan    FeePlan?
+  attendance AttendanceWeek[]
+  scores     TestScore[]
+  flags      DropoutFlag[]
+  tasks      CounsellorTask[]
+}
+
+// ---------- fees ----------
+
+model FeePlan {
+  id          String       @id @default(cuid())
+  studentId   String       @unique
+  student     Student      @relation(fields: [studentId], references: [id])
+  name        String // "JEE 2-year, 4 instalments"
+  totalPaise  Int // gross, GST-inclusive
+  gstRateBps  Int          @default(1800) // 18.00%
+  instalments Instalment[]
+}
+
+model Instalment {
+  id          String     @id @default(cuid())
+  code        String     @unique // "STU-0587-I1" — the payment reference
+  feePlanId   String
+  feePlan     FeePlan    @relation(fields: [feePlanId], references: [id])
+  seq         Int
+  dueDate     DateTime
+  amountPaise Int // gross for this instalment, GST-inclusive
+  // Denormalised from payments for reminder/dashboard queries; always
+  // recomputed by domain/ledger.ts inside the same transaction as a payment.
+  status      String     @default("due") // "due" | "part_paid" | "paid"
+  discounts   Discount[]
+  payments    Payment[]
+  reminders   Reminder[]
+
+  @@unique([feePlanId, seq])
+  @@index([status, dueDate])
+}
+
+model Discount {
+  id           String     @id @default(cuid())
+  instalmentId String
+  instalment   Instalment @relation(fields: [instalmentId], references: [id])
+  label        String // "Sibling concession"
+  amountPaise  Int
+}
+
+model Payment {
+  id           String     @id @default(cuid())
+  instalmentId String
+  instalment   Instalment @relation(fields: [instalmentId], references: [id])
+  amountPaise  Int
+  paidAt       DateTime
+  method       String // "gateway_test" | "bank" | "manual_allocation"
+  reference    String     @unique // gateway txn id / UTR — idempotency key
+  receiptNo    String     @unique
+  createdAt    DateTime   @default(now())
+}
+
+// A payment we could not tie to exactly one instalment. Never marks
+// anything paid; accounts staff allocate or reject it by hand.
+model UnmatchedPayment {
+  id                    String    @id @default(cuid())
+  reference             String    @unique
+  amountPaise           Int
+  receivedAt            DateTime
+  payerNote             String // raw narration from bank / gateway
+  reason                String // see domain/matching.ts UnmatchedReason
+  status                String    @default("open") // "open" | "allocated" | "rejected"
+  allocatedInstalmentId String?
+  resolvedById          String?
+  resolvedAt            DateTime?
+  resolutionNote        String?
+}
+
+// ---------- reminders ----------
+
+model Reminder {
+  id           String       @id @default(cuid())
+  instalmentId String
+  instalment   Instalment   @relation(fields: [instalmentId], references: [id])
+  kind         String // "before" | "on" | "after"
+  offsetDays   Int // -3, 0, +3, +7 relative to due date
+  scheduledFor DateTime
+  status       String       @default("scheduled") // "scheduled" | "sent" | "cancelled"
+  sentAt       DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+  messages     MessageLog[]
+
+  @@unique([instalmentId, offsetDays])
+  @@index([status, scheduledFor])
+}
+
+// Mocked outbound messages (SMS/WhatsApp are out of scope).
+model MessageLog {
+  id         String    @id @default(cuid())
+  reminderId String?
+  reminder   Reminder? @relation(fields: [reminderId], references: [id])
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  channel    String    @default("sms")
+  language   String
+  body       String
+  createdAt  DateTime
+}
+
+// ---------- refund policy ----------
+
+model RefundPolicy {
+  id          String       @id @default(cuid())
+  version     Int          @unique
+  active      Boolean      @default(false)
+  payoutDays  Int          @default(10)
+  publishedAt DateTime
+  notes       String
+  tiers       RefundTier[]
+}
+
+model RefundTier {
+  id            String       @id @default(cuid())
+  policyId      String
+  policy        RefundPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  upToWeek      Int // inclusive upper bound of weeks elapsed
+  refundPercent Int // % of the unused (pro-rata) fee that is refunded
+
+  @@unique([policyId, upToWeek])
+}
+
+// ---------- academics (seeded; bulk upload is cut) ----------
+
+model AttendanceWeek {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  weekStart DateTime
+  percent   Int
+
+  @@unique([studentId, weekStart])
+}
+
+model TestScore {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  testName  String
+  testDate  DateTime
+  percent   Int
+
+  @@unique([studentId, testName])
+}
+
+// ---------- AI dropout risk ----------
+
+model DropoutFlag {
+  id                String          @id @default(cuid())
+  studentId         String
+  student           Student         @relation(fields: [studentId], references: [id])
+  score             Int // 0-100, deterministic (domain/risk.ts)
+  signals           String // JSON text of RiskSignals — portable across DBs
+  explanation       String? // LLM "AI draft" for the counsellor
+  explanationSource String? // "ai" | "template"
+  status            String          @default("open") // "open" | "false_flag" | "actioned"
+  reviewNote        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime
+  task              CounsellorTask?
+}
+
+model CounsellorTask {
+  id        String      @id @default(cuid())
+  flagId    String      @unique
+  flag      DropoutFlag @relation(fields: [flagId], references: [id])
+  studentId String
+  student   Student     @relation(fields: [studentId], references: [id])
+  kind      String      @default("call_parent")
+  status    String      @default("open") // "open" | "done" | "cancelled"
+  dueBy     DateTime
+  createdAt DateTime
+}
