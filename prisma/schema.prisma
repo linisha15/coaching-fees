@@ -1,6 +1,6 @@
 // Coaching fee tracking + parent portal.
 //
-// Portability rules (SQLite locally, Postgres on deploy):
+// Portability rules (Postgres; schema avoids provider-specific features):
 //   - no Prisma enums: status/kind columns are strings, validated in
 //     src/lib/domain/* with Zod / literal unions
 //   - money is Int paise (no floats, no Decimal)
@@ -12,7 +12,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------- org ----------

@@ -17,6 +17,8 @@ import { ResetDemoButton } from "./reset-demo-button";
 
 // Per-user page (session/cookies): render at request time, skip instant-nav validation.
 export const instant = false;
+// "Reset demo data" replays the seed; give it headroom on serverless hosts.
+export const maxDuration = 120;
 
 function Stat({ label, value, sub, swatch }: { label: string; value: string; sub?: string; swatch?: string }) {
   return (

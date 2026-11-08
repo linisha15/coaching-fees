@@ -49,7 +49,7 @@ Next.js 16 (App Router, server components + server actions)
 │    risk.ts            evaluateRisk(), writeAiExplanation() (the one LLM call)
 │
 ├─ src/app/             Screens, server actions, 3 API routes
-└─ prisma/              schema (SQLite locally, Postgres-portable), seed
+└─ prisma/              schema (Postgres, no provider-specific features), migrations, seed
 ```
 
 **Why this split.** The hard parts are rules: instalments, refunds and the
@@ -60,9 +60,14 @@ are always derived. The one denormalised field, `Instalment.status`, exists for
 reminder queries. It is recomputed by the domain function inside the same
 transaction as the payment.
 
-**Portability.** There are no Prisma enums. Statuses are strings validated in
-code, money is integer paise and signals are JSON text. Moving to Postgres means
-changing `provider` and swapping the libsql adapter for `@prisma/adapter-pg`.
+**Database.** Postgres (Neon) through Prisma 7 and `@prisma/adapter-pg`. The app
+uses the pooled connection; migrations use the direct one. Development started
+on SQLite, so the schema avoids provider-specific features: no Prisma enums,
+statuses are strings validated in code, money is integer paise and signals are
+JSON text.
+
+**Deployment.** Vercel (Singapore region, next to the Neon database). The
+`vercel-build` script generates the client, applies migrations, then builds.
 
 ## 3. Data model
 

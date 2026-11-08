@@ -51,7 +51,10 @@ export async function requestOtp(phone: string): Promise<{ ok: true } | { ok: fa
   return { ok: true };
 }
 
-export async function verifyOtp(phone: string, code: string): Promise<{ ok: true; role: Role } | { ok: false; error: string }> {
+export async function verifyOtp(
+  phone: string,
+  code: string,
+): Promise<{ ok: true; role: Role; needsConsent: boolean } | { ok: false; error: string }> {
   const invalid = { ok: false as const, error: "That code is not right or has expired." };
   const challenge = await db.otpChallenge.findFirst({
     where: { phone, consumedAt: null, expiresAt: { gt: new Date() } },
@@ -82,7 +85,7 @@ export async function verifyOtp(phone: string, code: string): Promise<{ ok: true
     path: "/",
     expires: expiresAt,
   });
-  return { ok: true, role: user.role as Role };
+  return { ok: true, role: user.role as Role, needsConsent: user.role === "parent" && !user.consentAt };
 }
 
 export async function getCurrentUser() {

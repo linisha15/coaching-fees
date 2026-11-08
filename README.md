@@ -10,12 +10,12 @@ Design notes, assumptions and what was cut: **[TDD.md](TDD.md)**.
 
 ## Run it
 
-Requires Node 22+.
+Requires Node 22+ and a Postgres database (a free [Neon](https://neon.tech) project works).
 
 ```bash
-npm install
-cp .env.example .env          # SQLite file DB, demo clock, mock OTP
-npx prisma migrate dev        # creates dev.db and generates the client
+npm install                   # also generates the Prisma client
+cp .env.example .env          # then paste your DATABASE_URL (pooled) and DIRECT_URL
+npx prisma migrate deploy     # creates the tables
 npx prisma db seed            # 20 students, replays Apr→Nov history
 npm run dev                   # http://localhost:3000
 npm test                      # 57 unit tests (domain logic)

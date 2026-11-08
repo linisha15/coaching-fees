@@ -9,8 +9,9 @@ When unsure, cut depth, not quality. Label every assumption (see bottom).
 
 ## Stack
 - Next.js (App Router) + TypeScript, Tailwind, shadcn/ui
-- Prisma + SQLite (local). Deploy target if any: Postgres — keep the schema
-  provider-swappable, no SQLite-only features.
+- Prisma 7 + Postgres (Neon) via @prisma/adapter-pg. DATABASE_URL = pooled,
+  DIRECT_URL = direct (migrations). Deployed on Vercel (sin1). Keep the schema
+  free of provider-specific features. (Started on SQLite; switched for deploy.)
 - Auth: OTP login, mocked (fixed code 123456 in dev, printed to console).
 - One LLM call via /api server route; key from env ANTHROPIC_API_KEY. Never commit it.
 
@@ -64,7 +65,7 @@ signals, explanation, status), CounsellorTask, UnmatchedPayment.
 
 ## Commands
 - Scaffold: npx create-next-app@latest . --typescript --tailwind --app --src-dir --eslint
-- DB: npx prisma migrate dev / npx prisma db seed
+- DB: npx prisma migrate deploy / npx prisma db seed (new migration: npx prisma migrate dev)
 - Test: npm test   Dev: npm run dev
 
 ## Assumptions log (keep updated — goes into the TDD)

@@ -1,11 +1,13 @@
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "@/generated/prisma/client";
 
-// Swapping to Postgres: change the schema provider and use @prisma/adapter-pg here.
+// Runtime uses the pooled connection (DATABASE_URL). Migrations use the direct
+// one (DIRECT_URL) via prisma.config.ts.
 function createClient() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set (copy .env.example to .env)");
-  return new PrismaClient({ adapter: new PrismaLibSql({ url }) });
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error("DATABASE_URL is not set (copy .env.example to .env)");
+  // Small pool: serverless functions run many instances; Neon's pooler fans in.
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 5 }) });
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof createClient> };

@@ -31,7 +31,8 @@ export async function loginAction(prev: LoginState, form: FormData): Promise<Log
     if (!code.success) return { ...prev, error: code.error.issues[0].message };
     const res = await verifyOtp(prev.phone, code.data);
     if (!res.ok) return { ...prev, error: res.error };
-    redirect(res.role === "accounts" ? "/accounts" : "/parent");
+    // Straight to the right screen: saves a redirect hop on slow phones.
+    redirect(res.role === "accounts" ? "/accounts" : res.needsConsent ? "/consent" : "/parent");
   }
 
   return { step: "phone" };
