@@ -1,11 +1,9 @@
 # Technical design: Fees (coaching fee tracking + parent portal)
 
-| | |
-|---|---|
-| **GitHub** | https://github.com/linisha15/coaching-fees |
-| **Live demo** | https://coaching-fees.vercel.app |
-| **Sign in** | Accounts: 98000 00001 · Parent: 98290 10002 (Ishita) · Code: 123456 |
-| **Deployment** | See `deployment.md` |
+- **GitHub:** https://github.com/linisha15/coaching-fees
+- **Live demo:** https://coaching-fees.vercel.app
+- **Sign in:** accounts 98000 00001 · parent 98290 10002 (Ishita) · code 123456
+- **Deployment:** see `deployment.md`
 
 ## 1. What this is
 
