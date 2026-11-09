@@ -6,6 +6,9 @@ that stop the moment an instalment is paid, a pro-rata refund calculator, a
 dues dashboard by centre and batch, and a dropout-risk flag that only ever
 creates a counsellor call task.
 
+**Live demo: https://coaching-fees.vercel.app**. Sign in with any number below
+and the code **123456**.
+
 Design notes, assumptions and what was cut: **[TDD.md](TDD.md)**.
 
 ## Run it
