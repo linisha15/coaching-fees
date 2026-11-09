@@ -1,5 +1,12 @@
 # Technical design: Fees (coaching fee tracking + parent portal)
 
+| | |
+|---|---|
+| **GitHub** | https://github.com/linisha15/coaching-fees |
+| **Live demo** | https://coaching-fees.vercel.app |
+| **Sign in** | Accounts: 98000 00001 · Parent: 98290 10002 (Ishita) · Code: 123456 |
+| **Deployment** | See `deployment.md` |
+
 ## 1. What this is
 
 The client is Company A, a JEE/NEET coaching institute in Jaipur with 4
@@ -25,9 +32,12 @@ accounts executive.
 | — | Parent view of attendance and scores | **Cut**: kept off the 5-second dues screen |
 | — | Real SMS/WhatsApp, real gateway, real OTP | **Mocked** |
 
-There are 8 screens: login, consent, parent dues, instalments and receipts,
-pay, accounts dues, student ledger, unmatched queue, refunds, and risk flags.
-A receipt page and a public policy page support them.
+**Screens.**
+- **Parent (3):** dues, instalments and receipts, pay.
+- **Accounts (5):** dues dashboard, student ledger, unmatched queue, refunds,
+  risk flags.
+- **Supporting pages:** login, consent, a receipt page and a public refund
+  policy page.
 
 ## 2. Architecture
 
@@ -68,6 +78,8 @@ JSON text.
 
 **Deployment.** Vercel (Singapore region, next to the Neon database). The
 `vercel-build` script generates the client, applies migrations, then builds.
+Vercel Cron calls the reminder tick daily at 08:00 IST, so reminders go out
+without anyone pressing a button. Details in `deployment.md`.
 
 ## 3. Data model
 
@@ -187,6 +199,8 @@ issues one idempotency key per render.
   signals and the student's first name.
 - If the key is missing, the API errors or the model refuses, the template
   explanation stays and the button says why. Nothing else depends on the LLM.
+  **The live demo runs without an API key**, so reviewers see this fallback:
+  the score, signals and task all work, and the explanation is the template.
 - **When the flag is wrong**, the counsellor marks it a *false flag*, which
   requires a reason. That closes the task and keeps an audit note. A seeded
   example (Nisha: dengue, back in class) shows this.
@@ -231,13 +245,20 @@ issues one idempotency key per render.
   ageing boundaries, discounts, refund tiers and their boundaries, shortfall,
   policy validation, every matching outcome, GST rounding, risk scoring,
   reminder transitions and full lifecycles, and IST date formatting.
-- **An end-to-end browser run** (Playwright against a production build, 41
-  checks) was used during development. It covers login errors, consent,
-  Hindi, access denial, a failed then successful payment, the receipt,
-  reminders cancelled after payment, idempotent ticks, auto-match, duplicate
-  UTR, manual allocation, refused overpayment, the refund breakdown, policy
-  validation, the risk page, AI fallback, CSV export and API auth. The script
-  isn't in the repo; adding it under `e2e/` is the first follow-up.
+- **An end-to-end browser run** (Playwright, 41 checks) passed against a local
+  production build and against the **live Vercel deployment**. It covers
+  login errors, consent, Hindi, access denial, a failed then successful
+  payment, the receipt, reminders cancelled after payment, idempotent ticks,
+  auto-match, duplicate UTR, manual allocation, refused overpayment, the refund
+  breakdown, policy validation, the risk page, AI fallback, CSV export and API
+  auth. The script isn't in the repo yet; adding it under `e2e/` is the first
+  follow-up.
+- **Bugs found by that run and fixed:**
+  - Receipts dated the previous day for payments before 05:30 IST.
+  - Success messages disappeared together with the card they belonged to.
+  - Pages leaned on a client-side redirect where a server redirect was needed.
+  - On a slow network, parents who hadn't consented loaded the dues page first
+    and were then bounced to consent.
 
 ## 9. Assumptions log
 
@@ -257,6 +278,11 @@ issues one idempotency key per render.
 - One accounts login also acts as counsellor.
 - Students who have left are excluded from ageing.
 - Tally export is a CSV of receipt vouchers, not Tally XML.
+- The live demo is shared, and anyone can sign in with code 123456 (fake data
+  only). The accounts dashboard has a **Reset demo data** button, enabled by
+  `ALLOW_DEMO_RESET`, which restores the original state in about 7 seconds.
+- With the clock pinned, the daily reminder job finds nothing new after its
+  first run. That's expected, and the job is safe to run any number of times.
 
 ## 10. Next steps, in order
 
